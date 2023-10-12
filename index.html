@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftStream File Upload</title>
+</head>
+<body>
+
+<h2>Upload File to SwiftStream</h2>
+<form id="upload-form" enctype="multipart/form-data">
+    <input type="file" id="fileInput" name="file">
+    <input type="submit" value="Upload">
+</form>
+
+<div id="response"></div>
+
+<script>
+    document.getElementById("upload-form").addEventListener("submit", async function(e){
+        e.preventDefault();
+        let fileInput = document.getElementById("fileInput");
+        if(!fileInput.files.length) return alert("Please select a file");
+        let file = fileInput.files[0];
+
+        let formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            let response = await fetch("http://127.0.0.1:8080/upload/", {
+                method: "POST",
+                body: formData
+            });
+
+            if(!response.ok) throw new Error("Failed to upload");
+
+            let data = await response.json();
+            document.getElementById("response").textContent = "File uploaded: " + data.filename;
+        } catch(error) {
+            document.getElementById("response").textContent = "Error: " + error.message;
+        }
+    });
+</script>
+
+</body>
+</html>
