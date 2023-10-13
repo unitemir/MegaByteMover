@@ -17,28 +17,70 @@
 <div id="response"></div>
 
 <script>
-    document.getElementById("upload-form").addEventListener("submit", async function(e){
+    const CHUNK_SIZE = 5 * 1024 * 1024;
+
+    document.getElementById("upload-form").addEventListener("submit", async function(e) {
         e.preventDefault();
         let fileInput = document.getElementById("fileInput");
-        if(!fileInput.files.length) return alert("Please select a file");
+        if (!fileInput.files.length) return alert("Please select a file");
         let file = fileInput.files[0];
 
-        let formData = new FormData();
-        formData.append("file", file);
+        let chunkCount = Math.ceil(file.size / CHUNK_SIZE);
 
-        try {
-            let response = await fetch("http://127.0.0.1:8080/upload/", {
-                method: "POST",
-                body: formData
-            });
+        // Инициализация многокомпонентной загрузки
+        let initResponse = await fetch("http://127.0.0.1:8080/upload/initiate/?filename=" + file.name, {
+            method: "POST"
+        });
+        let initData = await initResponse.json();
+        let uploadId = initData.upload_id;
 
-            if(!response.ok) throw new Error("Failed to upload");
+        let parts = [];
+        for (let i = 0; i < chunkCount; i++) {
+            let start = i * CHUNK_SIZE;
+            let end = Math.min(file.size, start + CHUNK_SIZE);
+            let chunk = file.slice(start, end);
 
-            let data = await response.json();
-            document.getElementById("response").textContent = "File uploaded: " + data.filename;
-        } catch(error) {
-            document.getElementById("response").textContent = "Error: " + error.message;
+            let formData = new FormData();
+            formData.append("file", chunk);
+
+            // Загрузка части
+            try {
+                let response = await fetch(`http://127.0.0.1:8080/upload/?filename=${file.name}&part_number=${i + 1}&upload_id=${uploadId}`, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Failed to upload chunk " + (i + 1));
+
+                let data = await response.json();
+                parts.push({ PartNumber: i + 1, ETag: data.etag });
+                document.getElementById("response").textContent = "Uploaded chunk: " + (i + 1) + "/" + chunkCount;
+
+            } catch (error) {
+                document.getElementById("response").textContent = "Error: " + error.message;
+                return;
+            }
         }
+
+        // Завершение многокомпонентной загрузки
+        let completeResponse = await fetch("http://127.0.0.1:8080/upload/complete/", {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                filename: file.name,
+                upload_id: uploadId,
+                parts: parts
+            })
+        });
+        if (!completeResponse.ok) {
+            let errorData = await completeResponse.json();
+            alert("Error: " + errorData.detail);
+            return;
+        }
+        let completeData = await completeResponse.json();
+        document.getElementById("response").textContent = "Upload status: " + completeData.status;
     });
 </script>
 
